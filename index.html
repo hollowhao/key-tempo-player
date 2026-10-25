@@ -150,6 +150,26 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 .tabsrc details summary { cursor: pointer; font-size: .84rem; color: var(--accent); }
 .tabsrc details[open] summary { margin-bottom: 6px; }
 .live-tag { font-family: var(--font-display); color: var(--lcd-hot); }
+.tabsrc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ghostbtn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 8px 14px; font-size: .86rem; }
+.ghostbtn:hover { border-color: var(--danger); color: var(--danger); }
+.tablist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.trow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.trow.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.trow .meter { width: 8px; height: 28px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
+.trow .meter i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); transition: height .12s linear; }
+.trow .tname { min-width: 0; width: 100%; font: inherit; font-weight: 500; color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; }
+.trow .tname:hover { border-color: var(--line); }
+.trow .tname:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+.trow .st { font-size: .76rem; color: var(--muted); white-space: nowrap; }
+.trow.live .st { color: var(--accent); font-weight: 700; }
+.tkey { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.tkey button { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); font-size: 1rem; line-height: 1; }
+.tkey b { min-width: 2.6em; text-align: center; font-weight: 600; }
+.trow .x { border: 0; background: none; color: var(--muted); width: 32px; height: 32px; border-radius: 8px; font-size: 1.1rem; line-height: 1; }
+.trow .x:hover { background: var(--line); color: var(--fg); }
+.tabopts { display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; color: var(--muted); cursor: pointer; width: fit-content; }
+.tabopts input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 /* BPM tools */
 .bpmtools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .88rem; }
@@ -281,17 +301,23 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
     <div class="tabsrc-row">
       <div>
         <h2>動画・音楽サイトの音声を使う</h2>
-        <p class="lead" id="tabLead">別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。</p>
+        <p class="lead" id="tabLead">別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは、全部のタブを先に登録しておけます。</p>
       </div>
-      <button class="capbtn" id="tabBtn"><span class="dot"></span><span id="tabBtnText">タブ音声を取り込む</span></button>
+      <div class="tabsrc-actions">
+        <button class="capbtn" id="tabBtn"><span class="dot"></span><span id="tabBtnText">タブ音声を取り込む</span></button>
+        <button class="ghostbtn" id="tabStopAll" hidden>すべて停止</button>
+      </div>
     </div>
+    <ol class="tablist" id="tabList" hidden></ol>
+    <label class="tabopts" id="tabOpts" hidden><input type="checkbox" id="perTabKey"> 曲（タブ）ごとにキーを覚える</label>
     <details id="tabHelp">
       <summary>使い方</summary>
       <ol class="steps">
-        <li>別のタブで YouTube やニコニコ動画、SoundCloud などを開き、再生します。</li>
-        <li>このページに戻って<b>「タブ音声を取り込む」</b>を押し、そのタブを選びます。</li>
-        <li>選ぶ画面で<b>「タブの音声も共有する」がオン</b>になっているか確かめて「共有」を押します。</li>
-        <li><b>↑ / ↓</b> でキーを変えられます。元のタブの音は自動で消え、キーを変えた音だけが聞こえます。</li>
+        <li>歌う曲の YouTube などを、1曲ずつ別のタブで開きます（ニコニコ動画や SoundCloud も使えます）。</li>
+        <li>このページの<b>「タブ音声を取り込む」</b>を押してタブを選び、<b>「タブの音声も共有する」がオン</b>になっているのを確かめて「共有」を押します。</li>
+        <li>2曲目からは<b>「＋ タブを追加」</b>で同じように登録します。登録は最初に1回だけで、曲を変えるたびに取り込み直す必要はありません。</li>
+        <li>あとは各タブで再生・停止するだけです。音が出ているタブが自動で選ばれ、<b>↑ / ↓（W / S）</b>でキーを変えられます。元のタブの音は自動で消えます。</li>
+        <li><b>「曲（タブ）ごとにキーを覚える」</b>をオンにすると、曲ごとに別のキーを先に決めておけます。曲名の欄を押すと名前を変えられます。</li>
         <li>テンポは取り込み中は変えられないので、各サイトの再生速度の設定を使ってください。</li>
       </ol>
     </details>
@@ -452,6 +478,7 @@ class PVShifter {
         hist: new Float64Array(this.histSize), w: 0, cnt: 0,
         outF: new Float64Array(this.step), acc: new Float64Array(2 * N),
         lastP: new Float64Array(H), syn: new Float64Array(H), synNew: new Float64Array(H), init: false,
+        quiet: 0, sleeping: false,
       };
     }
     return s;
@@ -530,6 +557,18 @@ class PVShifter {
     const mask = this.mask, D = this.dryDelay, step = this.step;
     for (let c = 0; c < outs.length; c++) {
       const s = this.state(c), inp = ins[c], out = outs[c];
+      // 入力がしばらく無音なら計算を省く（一時停止中のタブがたくさんあっても重くならない）
+      let silent = true;
+      if (inp) for (let i = 0; i < n; i++) { const x = inp[i]; if (x > 1e-6 || x < -1e-6) { silent = false; break; } }
+      s.quiet = silent ? s.quiet + n : 0;
+      if (silent && s.quiet > this.N * 3) {
+        for (let i = 0; i < n; i++) { s.hist[s.w & mask] = 0; s.w++; out[i] = 0; }
+        s.sleeping = true;
+        continue;
+      }
+      if (s.sleeping) {
+        s.sleeping = false; s.acc.fill(0); s.outF.fill(0); s.lastP.fill(0); s.init = false; s.cnt = 0;
+      }
       for (let i = 0; i < n; i++) {
         s.hist[s.w & mask] = inp ? inp[i] : 0;
         s.w++;
@@ -641,8 +680,11 @@ registerProcessor('pv-shifter', PVNode);`;
     const sv = JSON.parse(localStorage.getItem('ktp-mix') || '{}');
     if (typeof sv.xfade === 'number') state.xfade = sv.xfade;
   } catch (e) {}
-  const tab = { stream: null, src: null };
-  const tabLive = () => !!tab.stream;
+  const tabs = [];                 // 取り込んだタブ { id, name, stream, src, sh, an, buf, key, level, live, devId }
+  let selTab = 0, tabSeq = 0;
+  const tabLive = () => tabs.length > 0;
+  const selectedTab = () => tabs.find((t) => t.id === selTab) || tabs[0] || null;
+  try { state.perTabKey = JSON.parse(localStorage.getItem('ktp-tabs') || '{}').perTabKey === true; } catch (e) { state.perTabKey = false; }
   let uid = 0;
 
   /* ---------- audio engine ---------- */
@@ -657,7 +699,7 @@ registerProcessor('pv-shifter', PVNode);`;
     state.ctx = ctx;
     if (ctx.state === 'suspended') ctx.resume();
     state.starting = (async () => {
-      let node, engine;
+      let useWorklet = false, engine;
       try {
         if (!ctx.audioWorklet || typeof AudioWorkletNode === 'undefined') throw new Error('no worklet');
         try {
@@ -665,21 +707,29 @@ registerProcessor('pv-shifter', PVNode);`;
         } catch (e1) {
           await ctx.audioWorklet.addModule('data:application/javascript;charset=utf-8,' + encodeURIComponent(WORKLET));
         }
-        node = new AudioWorkletNode(ctx, 'pv-shifter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
-        state.setRatio = (r) => node.port.postMessage(r);
+        useWorklet = true;
         engine = 'AudioWorklet';
       } catch (e) {
         console.warn('AudioWorklet unavailable, using ScriptProcessor:', e && e.message);
-        const sh = new PVShifter(ctx.sampleRate);
-        node = ctx.createScriptProcessor(2048, 2, 2);
-        node.onaudioprocess = (ev) => {
+        engine = 'ScriptProcessor';
+      }
+      // 音程を変える装置を作る（ファイル用に1つ、取り込んだタブごとに1つ）
+      state.makeShifter = () => {
+        if (useWorklet) {
+          const n = new AudioWorkletNode(ctx, 'pv-shifter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+          return { node: n, setRatio: (r) => n.port.postMessage(r) };
+        }
+        const sh = new PVShifter(ctx.sampleRate), n = ctx.createScriptProcessor(2048, 2, 2);
+        n.onaudioprocess = (ev) => {
           const ib = ev.inputBuffer, ob = ev.outputBuffer;
           const a = ib.getChannelData(0), b = ib.numberOfChannels > 1 ? ib.getChannelData(1) : a;
           sh.processBlock([a, b], [ob.getChannelData(0), ob.getChannelData(1)], ob.length);
         };
-        state.setRatio = (r) => { sh.ratio = r; };
-        engine = 'ScriptProcessor';
-      }
+        return { node: n, setRatio: (r) => { sh.ratio = r; } };
+      };
+      const main = state.makeShifter();
+      const node = main.node;
+      state.setRatio = main.setRatio;
       state.input = node;
       state.master = ctx.createGain();
       state.master.gain.value = masterVol();
@@ -708,6 +758,7 @@ registerProcessor('pv-shifter', PVNode);`;
 
   function applyKey() {
     if (state.setRatio) state.setRatio(Math.pow(2, state.key / 12));
+    tabs.forEach(applyTabKey);
     renderReadouts();
     updateMediaSession();
   }
@@ -730,12 +781,23 @@ registerProcessor('pv-shifter', PVNode);`;
     clearTimeout(el._t);
     el._t = setTimeout(() => el.classList.remove('hot'), 220);
   }
+  const fmtKey = (k) => (k > 0 ? '+' + k : k < 0 ? '−' + Math.abs(k) : '±0');
+  const keyTab = () => (tabLive() && state.perTabKey ? selectedTab() : null);   // 曲ごとのキーを操作中のタブ
+  const shownKey = () => { const t = keyTab(); return t ? t.key : state.key; };
   function changeKey(d) {
+    const t = keyTab();
+    if (t) return changeTabKey(t, d);
     const n = Math.max(-12, Math.min(12, state.key + d));
     if (n === state.key) return toast(n > 0 ? 'これ以上は上げられません（+12まで）' : 'これ以上は下げられません（−12まで）');
     state.key = n;
     if (!audio.paused) ensureAudio();
-    applyKey(); bump('#keyVal');
+    applyKey(); syncTabRows(); bump('#keyVal');
+  }
+  function resetKey() {
+    const t = keyTab();
+    if (t) { t.key = 0; applyTabKey(t); syncTabRows(); renderReadouts(); }
+    else { state.key = 0; applyKey(); syncTabRows(); }
+    bump('#keyVal');
   }
   function changeBpm(d) {
     if (tabLive()) return toast('タブ音声の取り込み中はテンポを変えられません。サイト側の再生速度を使ってください');
@@ -745,12 +807,12 @@ registerProcessor('pv-shifter', PVNode);`;
     if (state.bpmDelta === before) return toast('テンポは原曲の0.5〜2倍の範囲で変えられます');
     bump('#bpmVal');
   }
-  function resetAll() { state.key = 0; state.bpmDelta = 0; applyKey(); applyTempo(); bump('#keyVal'); bump('#bpmVal'); }
+  function resetAll() { resetKey(); state.bpmDelta = 0; applyTempo(); bump('#bpmVal'); }
 
   function renderReadouts() {
-    const k = state.key;
-    $('#keyVal').textContent = k > 0 ? '+' + k : k < 0 ? '−' + Math.abs(k) : '±0';
-    $('#keySub').innerHTML = k === 0 ? '原曲キー' : `<b>${Math.abs(k)}半音${k > 0 ? '上げ' : '下げ'}</b> · 周波数 ×${Math.pow(2, k / 12).toFixed(3)}`;
+    const k = shownKey(), kt = keyTab();
+    $('#keyVal').textContent = fmtKey(k);
+    $('#keySub').innerHTML = (kt ? `${esc(kt.name)} · ` : '') + (k === 0 ? '原曲キー' : `<b>${Math.abs(k)}半音${k > 0 ? '上げ' : '下げ'}</b> · 周波数 ×${Math.pow(2, k / 12).toFixed(3)}`);
     const t = cur(), o = origBpm();
     if (tabLive()) { $('#bpmVal').textContent = '---'; $('#bpmSub').textContent = 'タブ音声：テンポはサイト側の再生速度で'; return; }
     if (!t) { $('#bpmVal').textContent = '---'; $('#bpmSub').innerHTML = '&nbsp;'; return; }
@@ -1015,30 +1077,38 @@ registerProcessor('pv-shifter', PVNode);`;
   /* ---------- transport ---------- */
   function play() {
     if (!cur()) return toast('先に曲を追加してください');
-    if (tabLive()) stopTab();
+    if (tabLive()) return toast('タブ音声を使っています。ファイルを再生するには、先に「すべて停止」を押してください');
     unlockDecks();
     ensureAudio();
     const p = audio.play();
     if (p && p.catch) p.catch((e) => { if (e.name !== 'AbortError') toast('再生できませんでした：' + (e.message || e.name)); });
   }
   function togglePlay() {
-    if (tabLive()) return toast('タブ音声の再生・停止は元のタブで操作してください');
+    if (tabLive()) return toast('タブの再生・停止は、YouTube などのタブ側で操作してください');
     if (audio.paused) play(); else { cancelFade(); audio.pause(); }
   }
 
-  /* ---------- tab audio capture ---------- */
-  async function startTab() {
+  /* ---------- tab audio capture（複数タブ） ---------- */
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tabKeyOf = (t) => (state.perTabKey ? t.key : state.key);
+  function applyTabKey(t) { if (t.sh) t.sh.setRatio(Math.pow(2, tabKeyOf(t) / 12)); }
+  async function addTab() {
     const md = navigator.mediaDevices;
     if (!md || !md.getDisplayMedia) return toast('このブラウザはタブ音声の取り込みに対応していません。PC の Chrome か Edge で開いてください');
+    let controller = null;
+    try { if (window.CaptureController) { controller = new CaptureController(); try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} } } catch (e) { controller = null; }
     let stream;
     try {
-      stream = md.getDisplayMedia({
-        video: { frameRate: 1 },
+      const opts = {
+        video: { displaySurface: 'browser', frameRate: 1 },
         audio: { suppressLocalAudioPlayback: true, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-        preferCurrentTab: false, selfBrowserSurface: 'exclude', surfaceSwitching: 'include', systemAudio: 'include',
-      });
+        preferCurrentTab: false, selfBrowserSurface: 'exclude', surfaceSwitching: 'exclude', systemAudio: 'exclude', monitorTypeSurfaces: 'exclude',
+      };
+      if (controller) opts.controller = controller;
+      const pending = md.getDisplayMedia(opts);
       ensureAudio();
-      stream = await stream;
+      stream = await pending;
+      if (controller) { try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} }   // 登録後もこのページのままにする
     } catch (e) {
       return toast(e && e.name === 'NotAllowedError' ? '取り込みをキャンセルしました' : 'タブを取り込めませんでした：' + ((e && e.message) || e));
     }
@@ -1047,33 +1117,132 @@ registerProcessor('pv-shifter', PVNode);`;
       stream.getTracks().forEach((t) => t.stop());
       return toast('音声が共有されていません。選ぶ画面で「タブの音声も共有する」をオンにしてください');
     }
+    const devId = String((at.getSettings && at.getSettings().deviceId) || '').split('?')[0];
+    if (devId && tabs.some((t) => t.devId === devId)) {
+      stream.getTracks().forEach((t) => t.stop());
+      return toast('そのタブはもう登録されています');
+    }
     await ensureAudio();
-    if (!state.input) { stream.getTracks().forEach((t) => t.stop()); return toast('音声エンジンを起動できませんでした'); }
+    if (!state.makeShifter) { stream.getTracks().forEach((t) => t.stop()); return toast('音声エンジンを起動できませんでした'); }
     cancelFade();
     audio.pause();
-    tab.stream = stream;
-    tab.src = state.ctx.createMediaStreamSource(new MediaStream([at]));
-    tab.src.connect(state.input);
-    stream.getTracks().forEach((t) => t.addEventListener('ended', stopTab));
+    const ctx = state.ctx, sh = state.makeShifter();
+    const src = ctx.createMediaStreamSource(new MediaStream([at]));
+    const an = ctx.createAnalyser();
+    an.fftSize = 1024;
+    src.connect(an); src.connect(sh.node); sh.node.connect(state.master);
+    const t = { id: ++tabSeq, name: `曲${tabs.length + 1}`, stream, src, sh, an, buf: new Float32Array(an.fftSize), key: shownKey(), level: 0, live: false, heard: 0, devId };
+    tabs.push(t);
+    selTab = t.id;
+    applyTabKey(t);
+    stream.getTracks().forEach((tr) => tr.addEventListener('ended', () => removeTab(t.id)));
     const sup = md.getSupportedConstraints ? md.getSupportedConstraints() : {};
-    toast(sup.suppressLocalAudioPlayback ? '取り込みを開始しました。↑↓でキーを変えられます' : '取り込み開始。元のタブの音も聞こえる場合は、元のタブの音量を下げてください');
-    renderTab(); renderTrack();
+    toast(tabs.length > 1 ? `${tabs.length}曲目のタブを登録しました`
+      : sup.suppressLocalAudioPlayback ? '取り込みました。次の曲のタブも「＋ タブを追加」で登録できます'
+      : '取り込みました。元のタブの音も聞こえる場合は、元のタブの音量を下げてください');
+    renderTabs(); renderTrack();
   }
-  function stopTab() {
-    if (!tab.stream) return;
-    tab.stream.getTracks().forEach((t) => t.stop());
-    try { tab.src.disconnect(); } catch (e) {}
-    tab.stream = null; tab.src = null;
-    renderTab(); renderTrack();
+  function removeTab(id) {
+    const i = tabs.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    const [t] = tabs.splice(i, 1);
+    try { t.stream.getTracks().forEach((tr) => tr.stop()); } catch (e) {}
+    try { t.src.disconnect(); t.an.disconnect(); t.sh.node.disconnect(); } catch (e) {}
+    if (selTab === id) selTab = tabs.length ? tabs[Math.min(i, tabs.length - 1)].id : 0;
+    renderTabs(); renderTrack();
   }
-  function renderTab() {
-    const live = tabLive();
-    if (!$('#tabBtn')) return;
-    $('#tabBtn').classList.toggle('live', live);
-    $('#tabBtnText').textContent = live ? '取り込みを停止' : 'タブ音声を取り込む';
-    $('#tabLead').textContent = live ? '取り込み中です。再生・一時停止・シークは元のタブで操作してください。'
-      : '別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。';
+  function stopAllTabs() {
+    if (!tabs.length) return;
+    tabs.slice().forEach((t) => removeTab(t.id));
+    toast('タブの取り込みをすべて止めました');
   }
+  function selectTab(id) {
+    if (selTab === id) return;
+    selTab = id; syncTabRows(); renderTrack();
+  }
+  function cycleTab(d) {
+    if (!tabs.length) return;
+    const i = Math.max(0, tabs.findIndex((t) => t.id === selTab));
+    selectTab(tabs[(i + d + tabs.length) % tabs.length].id);
+  }
+  function changeTabKey(t, d) {
+    const n = Math.max(-12, Math.min(12, t.key + d));
+    if (n === t.key) return toast(n > 0 ? 'これ以上は上げられません（+12まで）' : 'これ以上は下げられません（−12まで）');
+    t.key = n; selTab = t.id;
+    applyTabKey(t); syncTabRows(); renderTrack(); bump('#keyVal');
+  }
+  function setPerTabKey(on) {
+    if (on) tabs.forEach((t) => { t.key = state.key; });
+    else { const st = selectedTab(); if (st) state.key = st.key; }
+    state.perTabKey = on;
+    try { localStorage.setItem('ktp-tabs', JSON.stringify({ perTabKey: on })); } catch (e) {}
+    applyKey(); renderTabs(); renderTrack();
+  }
+  function renderTabs() {
+    const list = $('#tabList');
+    if (!list) return;
+    const has = tabLive();
+    $('#tabBtnText').textContent = has ? '＋ タブを追加' : 'タブ音声を取り込む';
+    $('#tabStopAll').hidden = !has;
+    $('#tabOpts').hidden = !has;
+    list.hidden = !has;
+    $('#tabLead').textContent = has
+      ? '登録したタブのどれかを YouTube などで再生すると、その曲が自動で選ばれ、キーを変えた音が流れます。曲を変えるときも取り込み直す必要はありません。'
+      : '別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは、全部のタブを先に登録しておけます。';
+    list.innerHTML = '';
+    tabs.forEach((t, i) => {
+      const li = document.createElement('li');
+      li.className = 'trow';
+      li.dataset.id = t.id;
+      li.innerHTML = `<span class="meter" aria-hidden="true"><i></i></span>
+        <input class="tname" type="text" maxlength="40" aria-label="曲の名前（${i + 1}番目のタブ）">
+        <span class="st"></span>
+        <span class="tkey"${state.perTabKey ? '' : ' hidden'}><button class="kd" aria-label="この曲のキーを下げる">−</button><b></b><button class="ku" aria-label="この曲のキーを上げる">＋</button></span>
+        <button class="x" aria-label="このタブの取り込みをやめる">×</button>`;
+      const inp = li.querySelector('.tname');
+      inp.value = t.name;
+      inp.addEventListener('input', () => { t.name = inp.value.trim() || `曲${i + 1}`; if (selTab === t.id) renderTrack(); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); });
+      li.addEventListener('click', (e) => {
+        if (e.target.closest('.x')) return removeTab(t.id);
+        if (e.target.closest('.kd')) return changeTabKey(t, -1);
+        if (e.target.closest('.ku')) return changeTabKey(t, 1);
+        selectTab(t.id);
+      });
+      list.appendChild(li);
+    });
+    syncTabRows();
+  }
+  function syncTabRows() {
+    tabs.forEach((t) => {
+      const li = document.querySelector(`.trow[data-id="${t.id}"]`);
+      if (!li) return;
+      li.classList.toggle('sel', t.id === selTab);
+      li.classList.toggle('live', t.live);
+      li.querySelector('.meter i').style.height = Math.min(100, Math.round(t.level * 400)) + '%';
+      li.querySelector('.st').textContent = t.live ? '再生中' : '停止中';
+      li.querySelector('.tkey b').textContent = fmtKey(t.key);
+    });
+  }
+  // どのタブから音が出ているかを見て、鳴り始めたタブを自動で選ぶ
+  setInterval(() => {
+    if (!tabs.length) return;
+    const now = performance.now();
+    let started = null;
+    for (const t of tabs) {
+      t.an.getFloatTimeDomainData(t.buf);
+      let sum = 0;
+      for (let i = 0; i < t.buf.length; i++) sum += t.buf[i] * t.buf[i];
+      const rms = Math.sqrt(sum / t.buf.length);
+      t.level = Math.max(rms, t.level * 0.75);
+      if (rms > 0.003) t.heard = now;
+      const live = now - t.heard < 1500;
+      if (live && !t.live) started = t;
+      t.live = live;
+    }
+    if (started && started.id !== selTab) { selTab = started.id; renderTrack(); }
+    syncTabRows();
+  }, 150);
 
   const REPEAT = { all: '全曲リピート', one: '1曲リピート', off: 'リピートなし' };
   function cycleRepeat() {
@@ -1100,8 +1269,9 @@ registerProcessor('pv-shifter', PVNode);`;
   function renderTrack() {
     const t = cur();
     if (tabLive()) {
-      $('#trackName').textContent = 'タブの音声を取り込み中';
-      $('#trackMeta').innerHTML = '<span class="live-tag">● LIVE</span>';
+      const st = selectedTab();
+      $('#trackName').textContent = st ? st.name : 'タブの音声を取り込み中';
+      $('#trackMeta').innerHTML = `<span class="live-tag">● LIVE · ${tabs.length}タブ</span>`;
       renderReadouts(); return;
     }
     $('#trackName').textContent = t ? t.name : '曲を追加してください';
@@ -1233,8 +1403,13 @@ registerProcessor('pv-shifter', PVNode);`;
   }
 
   /* ---------- events ---------- */
-  $('#play').addEventListener('click', () => { if (tabLive()) { stopTab(); play(); } else togglePlay(); });
-  if ($('#tabBtn')) $('#tabBtn').addEventListener('click', () => (tabLive() ? stopTab() : startTab()));
+  $('#play').addEventListener('click', togglePlay);
+  if ($('#tabBtn')) {
+    $('#tabBtn').addEventListener('click', addTab);
+    $('#tabStopAll').addEventListener('click', stopAllTabs);
+    $('#perTabKey').checked = state.perTabKey;
+    $('#perTabKey').addEventListener('change', (e) => setPerTabKey(e.target.checked));
+  }
   $('#prev').addEventListener('click', () => (audio.currentTime > 3 ? (audio.currentTime = 0) : step(-1)));
   $('#next').addEventListener('click', () => step(1));
   $('#repeat').addEventListener('click', cycleRepeat);
@@ -1242,7 +1417,7 @@ registerProcessor('pv-shifter', PVNode);`;
   $('#keyDown').addEventListener('click', () => changeKey(-1));
   $('#bpmUp').addEventListener('click', (e) => changeBpm(e.shiftKey ? 5 : 1));
   $('#bpmDown').addEventListener('click', (e) => changeBpm(e.shiftKey ? -5 : -1));
-  $('#keyReset').addEventListener('click', () => { state.key = 0; applyKey(); bump('#keyVal'); });
+  $('#keyReset').addEventListener('click', resetKey);
   $('#bpmReset').addEventListener('click', () => { state.bpmDelta = 0; applyTempo(); bump('#bpmVal'); });
   $('#file').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
   const vol = $('#vol');
@@ -1319,8 +1494,8 @@ registerProcessor('pv-shifter', PVNode);`;
       case 'ArrowRight': changeBpm(e.shiftKey ? 5 : 1); cap = '#bpmUp'; break;
       case 'ArrowLeft': changeBpm(e.shiftKey ? -5 : -1); cap = '#bpmDown'; break;
       case ' ': case 'Spacebar': if (el && el.tagName === 'BUTTON') return; togglePlay(); break;
-      case 'n': case 'N': step(1); break;
-      case 'p': case 'P': $('#prev').click(); break;
+      case 'n': case 'N': if (tabLive()) cycleTab(1); else step(1); break;
+      case 'p': case 'P': if (tabLive()) cycleTab(-1); else $('#prev').click(); break;
       case 'r': case 'R': resetAll(); break;
       default: return;
     }
