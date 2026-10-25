@@ -14,6 +14,12 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:creator" content="@hollowhao">
 <meta name="theme-color" content="#0f1a1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="キーテンポ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script data-goatcounter="https://hollowhao-jp.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f1a1e'/%3E%3Cpath d='M20 44V20l26 12z' fill='%23a6f0d6'/%3E%3C/svg%3E">
 </head>
@@ -73,6 +79,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; let
 h1 small { display: block; font-family: var(--font-body); font-weight: 500; font-size: .8rem; color: var(--muted); letter-spacing: 0; }
 .engine { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 button { font: inherit; color: inherit; cursor: pointer; }
+button, select, input, label { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible, .addbtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* LCD display */
@@ -203,6 +210,19 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
   .vol { margin-left: 0; flex: 1 1 100%; }
   .lcd { padding: 16px; }
 }
+/* Install as app */
+.install { position: relative; display: flex; gap: 12px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding-right: 52px; }
+.install-text { min-width: 0; flex: 1 1 260px; }
+.install h2 { font-size: 1rem; margin: 0; }
+.install p { margin: 2px 0 0; font-size: .84rem; color: var(--muted); }
+.install .x { position: absolute; top: 8px; right: 8px; border: 0; background: none; color: var(--muted); width: 36px; height: 36px; border-radius: 8px; font-size: 1.2rem; }
+.install .x:hover { background: var(--line); color: var(--fg); }
+.touch-note { display: none; font-size: .84rem; color: var(--muted); margin: 0 0 8px; }
+@media (hover: none) and (pointer: coarse) {
+  .touch-note { display: block; }
+  .kb { display: none; }
+  .mix select, .bpmtools input { font-size: 16px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .eq i { animation: none; height: 70%; }
   .ro-value { transition: none; }
@@ -214,6 +234,17 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
     <h1>キー変更・テンポ変更プレイヤー<small>曲のキー（音程）とBPMを別々に変えられる無料ツール</small></h1>
     <div class="engine" id="engine">音声エンジン：再生開始時に起動</div>
   </header>
+
+  
+  <section class="panel install" id="installPanel" aria-label="アプリとして使う" hidden>
+    <button class="x" id="installClose" aria-label="この案内を閉じる">×</button>
+    <div class="install-text">
+      <h2>アプリとして使う</h2>
+      <p id="installHow">ホーム画面に追加すると、アプリのように全画面で使えます。</p>
+    </div>
+    <button class="capbtn" id="installBtn" hidden>アプリをインストール</button>
+  </section>
+  
 
   <section class="lcd" aria-label="ディスプレイ">
     <div class="lcd-top">
@@ -314,7 +345,8 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
 
   <section class="panel help">
     <div>
-      <h3>キーボード操作</h3>
+      <h3>操作方法</h3>
+      <p class="touch-note">スマホ・タブレットでは、画面の ▲▼ ◀▶ ボタンでキーとBPMを変えられます。</p>
       <div class="kb">
         <span><kbd>↑</kbd> <kbd>↓</kbd> / <kbd>W</kbd> <kbd>S</kbd></span><span>キーを半音ずつ上げ下げ（±12まで）</span>
         <span><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd></span><span>BPMを1ずつ上げ下げ（キーは変わりません・ファイル再生時）</span>
@@ -347,8 +379,8 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
 
 <div class="overlay" id="overlay" hidden>ドロップしてプレイリストに追加</div>
 <div class="toast" id="toast" role="status" hidden></div>
-<audio id="media" preload="auto"></audio>
-<audio id="media2" preload="auto"></audio>
+<audio id="media" preload="auto" playsinline></audio>
+<audio id="media2" preload="auto" playsinline></audio>
 
 <script type="text/plain" id="dsp-src">
 class FFT {
@@ -587,6 +619,13 @@ class PVNode extends AudioWorkletProcessor {
 registerProcessor('pv-shifter', PVNode);`;
 
   const BASE_TITLE = document.title;
+  const UA = navigator.userAgent || '';
+  const IS_IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const IS_ANDROID = /Android/i.test(UA);
+  const IS_MOBILE = IS_IOS || IS_ANDROID || !!(navigator.userAgentData && navigator.userAgentData.mobile);
+  const IS_STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  // iPhone: マナーモードでも音が出るようにする（Safari 16.4+）
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   const decks = [$('#media'), $('#media2')];
   decks.forEach((d) => { d.preservesPitch = true; d.mozPreservesPitch = true; d.webkitPreservesPitch = true; });
   let audio = decks[0];            // 今鳴っている（操作対象の）デッキ
@@ -609,7 +648,7 @@ registerProcessor('pv-shifter', PVNode);`;
   /* ---------- audio engine ---------- */
   function ensureAudio() {
     if (state.ctx) {
-      if (state.ctx.state === 'suspended') state.ctx.resume();
+      if (state.ctx.state !== 'running') state.ctx.resume();
       return state.starting;
     }
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -642,6 +681,9 @@ registerProcessor('pv-shifter', PVNode);`;
         engine = 'ScriptProcessor';
       }
       state.input = node;
+      state.master = ctx.createGain();
+      state.master.gain.value = masterVol();
+      decks.forEach((d) => { d.volume = 1; });   // 音量は master で調整（iPhone は要素の音量を変えられないため）
       state.gains = decks.map((d) => {
         const src = ctx.createMediaElementSource(d), gn = ctx.createGain();
         gn.gain.value = d === audio || !fade ? 1 : 0;
@@ -650,7 +692,7 @@ registerProcessor('pv-shifter', PVNode);`;
       });
       const an = ctx.createAnalyser();
       an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
-      node.connect(an); an.connect(ctx.destination);
+      node.connect(state.master); state.master.connect(an); an.connect(ctx.destination);
       state.analyser = an;
       applyKey();
       $('#engine').textContent = `音声エンジン：${engine} · ${ctx.sampleRate / 1000}kHz`;
@@ -667,6 +709,7 @@ registerProcessor('pv-shifter', PVNode);`;
   function applyKey() {
     if (state.setRatio) state.setRatio(Math.pow(2, state.key / 12));
     renderReadouts();
+    updateMediaSession();
   }
   function clampDelta() {
     const o = origBpm();
@@ -805,7 +848,7 @@ registerProcessor('pv-shifter', PVNode);`;
     if (state.gains) {
       const gp = state.gains[gi].gain, now = state.ctx.currentTime;
       gp.cancelScheduledValues(now); gp.setValueAtTime(v, now);
-      d.volume = masterVol();
+      d.volume = 1;
     } else d.volume = masterVol() * v;
   }
   const masterVol = () => $('#vol').value / 100;
@@ -816,7 +859,7 @@ registerProcessor('pv-shifter', PVNode);`;
       for (let k = 0; k < N; k++) { const x = k / (N - 1); curve[k] = up ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2); }
       gp.cancelScheduledValues(now);
       try { gp.setValueCurveAtTime(curve, now, secs); } catch (e) { gp.setValueAtTime(up ? 1 : 0, now); }
-      d.volume = masterVol();
+      d.volume = 1;
     } else {
       const t0 = performance.now();
       clearInterval(d._fadeT);
@@ -894,7 +937,7 @@ registerProcessor('pv-shifter', PVNode);`;
     try {
       const ab = await t.file.arrayBuffer();
       const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-      const oc = new OC(1, 44100, 44100);
+      const oc = new OC(1, 22050, 22050);   // 解析用は 22.05kHz で十分（スマホのメモリ節約）
       const buf = await new Promise((res, rej) => { const p = oc.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
       const sr = buf.sampleRate;
       const start = buf.duration > 100 ? Math.floor(sr * Math.min(30, buf.duration * 0.15)) : 0;
@@ -914,10 +957,66 @@ registerProcessor('pv-shifter', PVNode);`;
     setTimeout(queueAnalysis, 200);
   }
 
+  /* ---------- mobile helpers ---------- */
+  // iPhone は「タップで再生した要素」しか自動で鳴らせないので、最初のタップで2台目も鳴らせる状態にしておく
+  const SILENT = (() => {
+    const n = 800, ab = new ArrayBuffer(44 + n * 2), v = new DataView(ab);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([ab], { type: 'audio/wav' }));
+  })();
+  function unlockDecks() {
+    decks.forEach((d) => {
+      if (d === audio || d._unlocked || d.getAttribute('src')) return;
+      d._unlocked = true;
+      d.src = SILENT;
+      const done = () => { if (d.getAttribute('src') === SILENT) { d.pause(); d.removeAttribute('src'); d.load(); } };
+      const p = d.play();
+      if (p && p.then) p.then(done, done); else done();
+    });
+  }
+  // 再生中は画面が消えないようにする（対応ブラウザのみ）
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
+    } catch (e) { wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (state.ctx && state.ctx.state !== 'running' && !audio.paused) state.ctx.resume();
+    if (!audio.paused) keepAwake(true);
+  });
+  // ロック画面・通知のコントロール
+  function updateMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      const t = cur();
+      navigator.mediaSession.metadata = t && window.MediaMetadata
+        ? new MediaMetadata({ title: t.name, artist: state.key ? `キー ${state.key > 0 ? '+' : '−'}${Math.abs(state.key)}` : 'キー変更・テンポ変更プレイヤー' })
+        : null;
+      navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+    } catch (e) {}
+  }
+  if ('mediaSession' in navigator) {
+    const ms = navigator.mediaSession;
+    const on = (a, f) => { try { ms.setActionHandler(a, f); } catch (e) {} };
+    on('play', () => play());
+    on('pause', () => { cancelFade(); audio.pause(); });
+    on('nexttrack', () => step(1));
+    on('previoustrack', () => step(-1));
+  }
+
   /* ---------- transport ---------- */
   function play() {
     if (!cur()) return toast('先に曲を追加してください');
     if (tabLive()) stopTab();
+    unlockDecks();
     ensureAudio();
     const p = audio.play();
     if (p && p.catch) p.catch((e) => { if (e.name !== 'AbortError') toast('再生できませんでした：' + (e.message || e.name)); });
@@ -1009,6 +1108,7 @@ registerProcessor('pv-shifter', PVNode);`;
     $('#trackMeta').innerHTML = fade ? '<span class="mixing">MIX ▶</span>' : '';
     if (t && !fade) $('#trackMeta').textContent = `${t.ext}${t.error ? ' · 再生不可' : ''}`;
     document.title = t && !t.demo ? `${t.name} · キー変更・テンポ変更プレイヤー` : BASE_TITLE;
+    updateMediaSession();
     renderReadouts(); renderTime();
   }
   function renderList() {
@@ -1037,6 +1137,7 @@ registerProcessor('pv-shifter', PVNode);`;
     if (!state.tracks.length) ol.innerHTML = '<li class="hint" style="padding:8px">まだ曲がありません。</li>';
   }
   function renderPlay() {
+    updateMediaSession();
     const playing = !audio.paused;
     $('#playIcon').innerHTML = playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4.5v15L20 12z"/>';
     $('#play').setAttribute('aria-label', playing ? '一時停止' : '再生');
@@ -1096,6 +1197,41 @@ registerProcessor('pv-shifter', PVNode);`;
     return `<span class="fmt${ok ? '' : ' no'}" title="${ok ? '再生できます' : 'このブラウザは非対応'}">${label}</span>`;
   }).join('');
 
+  /* ---------- phone / app ---------- */
+  if ($('#tabBtn') && (IS_MOBILE || !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia))) {
+    $('#tabBtn').hidden = true;
+    if ($('#tabHelp')) $('#tabHelp').hidden = true;
+    $('#tabLead').textContent = 'スマホ・タブレットでは、ほかのアプリやタブの音声を取り込めないため、この機能はPC（Chrome / Edge）専用です。';
+  }
+  if ($('#installPanel')) {
+    const panel = $('#installPanel'), how = $('#installHow'), btn = $('#installBtn');
+    let dismissed = false;
+    try { dismissed = localStorage.getItem('ktp-install-dismissed') === '1'; } catch (e) {}
+    let deferred = null;
+    const show = () => {
+      if (IS_STANDALONE || dismissed) return;
+      if (deferred) { btn.hidden = false; how.textContent = 'インストールすると、ホーム画面やアプリ一覧から全画面で開けます。'; panel.hidden = false; }
+      else if (IS_IOS) { how.innerHTML = 'Safari の<b>共有ボタン</b>（□に↑のマーク）→<b>「ホーム画面に追加」</b>で、アプリのように全画面で使えます。'; panel.hidden = false; }
+      else if (IS_ANDROID) { how.innerHTML = 'Chrome の<b>メニュー（︙）</b>→<b>「ホーム画面に追加」</b>または<b>「アプリをインストール」</b>で、アプリのように使えます。'; panel.hidden = false; }
+    };
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; show(); });
+    window.addEventListener('appinstalled', () => { panel.hidden = true; deferred = null; });
+    btn.addEventListener('click', async () => {
+      if (!deferred) return;
+      deferred.prompt();
+      try { await deferred.userChoice; } catch (e) {}
+      deferred = null; panel.hidden = true;
+    });
+    $('#installClose').addEventListener('click', () => {
+      panel.hidden = true; dismissed = true;
+      try { localStorage.setItem('ktp-install-dismissed', '1'); } catch (e) {}
+    });
+    show();
+  }
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && document.querySelector('link[rel="manifest"]')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
   /* ---------- events ---------- */
   $('#play').addEventListener('click', () => { if (tabLive()) { stopTab(); play(); } else togglePlay(); });
   if ($('#tabBtn')) $('#tabBtn').addEventListener('click', () => (tabLive() ? stopTab() : startTab()));
@@ -1111,7 +1247,9 @@ registerProcessor('pv-shifter', PVNode);`;
   $('#file').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
   const vol = $('#vol');
   const setVol = () => {
-    decks.forEach((d) => { if (state.gains || d === audio) d.volume = vol.value / 100; });
+    const v = vol.value / 100;
+    if (state.master) state.master.gain.value = v;
+    else decks.forEach((d) => { d.volume = v; });
     vol.style.setProperty('--p', vol.value + '%');
   };
   vol.addEventListener('input', setVol); setVol();
@@ -1144,8 +1282,8 @@ registerProcessor('pv-shifter', PVNode);`;
     d.addEventListener('timeupdate', onActive(renderTime));
     d.addEventListener('loadedmetadata', onActive(() => { audio.playbackRate = rate(); renderTime(); }));
     d.addEventListener('ratechange', onActive(() => { const r = rate(); if (Math.abs(audio.playbackRate - r) > 1e-6) audio.playbackRate = r; }));
-    d.addEventListener('play', onActive(renderPlay));
-    d.addEventListener('pause', onActive(renderPlay));
+    d.addEventListener('play', onActive(() => { renderPlay(); keepAwake(true); }));
+    d.addEventListener('pause', onActive(() => { renderPlay(); if (!fade) keepAwake(false); }));
     d.addEventListener('ended', onActive(() => {
       const n = nextIndex();
       if (n < 0) return;
