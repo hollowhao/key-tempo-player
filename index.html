@@ -305,7 +305,7 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
       </div>
       <div class="tabsrc-actions">
         <button class="capbtn" id="tabBtn"><span class="dot"></span><span id="tabBtnText">タブ音声を取り込む</span></button>
-        <button class="ghostbtn" id="tabStopAll" hidden>すべて停止</button>
+        <button class="ghostbtn" id="tabStopAll" hidden>すべて解除</button>
       </div>
     </div>
     <ol class="tablist" id="tabList" hidden></ol>
@@ -1077,7 +1077,7 @@ registerProcessor('pv-shifter', PVNode);`;
   /* ---------- transport ---------- */
   function play() {
     if (!cur()) return toast('先に曲を追加してください');
-    if (tabLive()) return toast('タブ音声を使っています。ファイルを再生するには、先に「すべて停止」を押してください');
+    if (tabLive()) return toast('タブ音声を使っています。ファイルを再生するには、先に「すべて解除」を押してください');
     unlockDecks();
     ensureAudio();
     const p = audio.play();
@@ -1154,7 +1154,7 @@ registerProcessor('pv-shifter', PVNode);`;
   function stopAllTabs() {
     if (!tabs.length) return;
     tabs.slice().forEach((t) => removeTab(t.id));
-    toast('タブの取り込みをすべて止めました');
+    toast('タブの登録をすべて解除しました');
   }
   function selectTab(id) {
     if (selTab === id) return;
