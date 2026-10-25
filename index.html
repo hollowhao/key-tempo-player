@@ -119,6 +119,11 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 .tbtn.play { width: 56px; height: 56px; background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .tbtn.play svg { width: 22px; height: 22px; }
 .tbtn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.mix { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; font-size: .84rem; color: var(--muted); flex: 1 1 100%; order: 5; padding-top: 6px; border-top: 1px dashed var(--line); margin-top: 4px; }
+.mix select { font: inherit; color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.mix .chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.mix .chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+.mixing { color: var(--lcd-hot); }
 .repeat-label { font-size: .78rem; color: var(--muted); min-width: 5.5em; }
 .vol { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 140px; flex: 0 1 200px; color: var(--muted); }
 .vol svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
@@ -274,6 +279,17 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
       <button class="tbtn" id="next" aria-label="次の曲"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
       <button class="tbtn" id="repeat" aria-label="リピート切り替え" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg></button>
       <span class="repeat-label" id="repeatLabel">全曲リピート</span>
+      <div class="mix">
+        <label for="xfade">曲のつなぎ</label>
+        <select id="xfade">
+          <option value="0">なし</option>
+          <option value="3">3秒</option>
+          <option value="6" selected>6秒</option>
+          <option value="10">10秒</option>
+          <option value="16">16秒</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="syncBpm"> 次の曲のBPMを今の曲に合わせる</label>
+      </div>
       <div class="vol"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="85" aria-label="音量"></div>
     </div>
   </section>
@@ -306,6 +322,7 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
         <span><kbd>Space</kbd></span><span>再生 / 一時停止</span>
         <span><kbd>N</kbd> <kbd>P</kbd></span><span>次の曲 / 前の曲</span>
         <span><kbd>R</kbd></span><span>キーとBPMを元に戻す</span>
+        <span><kbd>N</kbd>・曲をクリック</span><span>再生中は「曲のつなぎ」の秒数で重ねて次の曲へ</span>
       </div>
     </div>
     <div>
@@ -331,6 +348,7 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
 <div class="overlay" id="overlay" hidden>ドロップしてプレイリストに追加</div>
 <div class="toast" id="toast" role="status" hidden></div>
 <audio id="media" preload="auto"></audio>
+<audio id="media2" preload="auto"></audio>
 
 <script type="text/plain" id="dsp-src">
 class FFT {
@@ -569,13 +587,22 @@ class PVNode extends AudioWorkletProcessor {
 registerProcessor('pv-shifter', PVNode);`;
 
   const BASE_TITLE = document.title;
-  const audio = $('#media');
-  audio.preservesPitch = true; audio.mozPreservesPitch = true; audio.webkitPreservesPitch = true;
+  const decks = [$('#media'), $('#media2')];
+  decks.forEach((d) => { d.preservesPitch = true; d.mozPreservesPitch = true; d.webkitPreservesPitch = true; });
+  let audio = decks[0];            // 今鳴っている（操作対象の）デッキ
+  const other = () => (audio === decks[0] ? decks[1] : decks[0]);
+  let fade = null;                 // つなぎ中の情報 { out, outIdx, timer }
 
   const state = {
     tracks: [], idx: -1, key: 0, bpmDelta: 0, repeat: 'all',
     ctx: null, analyser: null, setRatio: null, starting: null, taps: [], input: null,
+    gains: null, xfade: 6, syncBpm: false,
   };
+  try {
+    const sv = JSON.parse(localStorage.getItem('ktp-mix') || '{}');
+    if (typeof sv.xfade === 'number') state.xfade = sv.xfade;
+    if (typeof sv.syncBpm === 'boolean') state.syncBpm = sv.syncBpm;
+  } catch (e) {}
   const tab = { stream: null, src: null };
   const tabLive = () => !!tab.stream;
   let uid = 0;
@@ -616,10 +643,15 @@ registerProcessor('pv-shifter', PVNode);`;
         engine = 'ScriptProcessor';
       }
       state.input = node;
-      const src = ctx.createMediaElementSource(audio);
+      state.gains = decks.map((d) => {
+        const src = ctx.createMediaElementSource(d), gn = ctx.createGain();
+        gn.gain.value = d === audio || !fade ? 1 : 0;
+        src.connect(gn); gn.connect(node);
+        return gn;
+      });
       const an = ctx.createAnalyser();
       an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
-      src.connect(node); node.connect(an); an.connect(ctx.destination);
+      node.connect(an); an.connect(ctx.destination);
       state.analyser = an;
       applyKey();
       $('#engine').textContent = `音声エンジン：${engine} · ${ctx.sampleRate / 1000}kHz`;
@@ -726,8 +758,11 @@ registerProcessor('pv-shifter', PVNode);`;
   function loadTrack(i, autoplay) {
     const t = state.tracks[i];
     if (!t) return;
+    cancelFade();
     if (i !== state.idx) state.bpmDelta = 0;
     state.idx = i;
+    setDeckLevel(audio, 1);
+    audio.loop = state.repeat === 'one';
     audio.src = t.url;
     audio.load();
     applyTempo();
@@ -740,6 +775,7 @@ registerProcessor('pv-shifter', PVNode);`;
     if (i < 0) return;
     const [t] = state.tracks.splice(i, 1);
     if (i === state.idx) {
+      cancelFade();
       const wasPlaying = !audio.paused;
       audio.pause(); audio.removeAttribute('src'); audio.load();
       URL.revokeObjectURL(t.url);
@@ -747,6 +783,8 @@ registerProcessor('pv-shifter', PVNode);`;
       else { state.idx = -1; renderTrack(); renderReadouts(); }
     } else {
       if (i < state.idx) state.idx--;
+      if (fade && fade.outIdx === i) cancelFade();
+      else if (fade && i < fade.outIdx) fade.outIdx--;
       URL.revokeObjectURL(t.url);
       renderList();
     }
@@ -754,8 +792,104 @@ registerProcessor('pv-shifter', PVNode);`;
   function step(d) {
     if (!state.tracks.length) return;
     const n = (state.idx + d + state.tracks.length) % state.tracks.length;
-    loadTrack(n, !audio.paused || d !== 0);
+    goTo(n);
   }
+  // 再生中で「つなぎ」がオンなら重ねて切り替え、そうでなければ普通に切り替え
+  function goTo(i) {
+    if (state.xfade > 0 && !audio.paused && !tabLive() && state.tracks.length) crossfadeTo(i, state.xfade);
+    else loadTrack(i, true);
+  }
+
+  /* ---------- crossfade (曲のつなぎ) ---------- */
+  function setDeckLevel(d, v) {
+    const gi = decks.indexOf(d);
+    if (state.gains) {
+      const gp = state.gains[gi].gain, now = state.ctx.currentTime;
+      gp.cancelScheduledValues(now); gp.setValueAtTime(v, now);
+      d.volume = masterVol();
+    } else d.volume = masterVol() * v;
+  }
+  const masterVol = () => $('#vol').value / 100;
+  function rampDeck(d, up, secs) {
+    const gi = decks.indexOf(d);
+    if (state.gains && state.ctx.state === 'running') {
+      const gp = state.gains[gi].gain, now = state.ctx.currentTime, N = 64, curve = new Float32Array(N);
+      for (let k = 0; k < N; k++) { const x = k / (N - 1); curve[k] = up ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2); }
+      gp.cancelScheduledValues(now);
+      try { gp.setValueCurveAtTime(curve, now, secs); } catch (e) { gp.setValueAtTime(up ? 1 : 0, now); }
+      d.volume = masterVol();
+    } else {
+      const t0 = performance.now();
+      clearInterval(d._fadeT);
+      d._fadeT = setInterval(() => {
+        const x = Math.min(1, (performance.now() - t0) / (secs * 1000));
+        d.volume = masterVol() * (up ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2));
+        if (x >= 1) clearInterval(d._fadeT);
+      }, 50);
+    }
+  }
+  function nextIndex() {
+    const n = state.tracks.length;
+    if (!n || state.repeat === 'one') return -1;
+    for (let k = 1; k <= n; k++) {
+      const j = state.idx + k;
+      if (j >= n && state.repeat === 'off') return -1;
+      const t = state.tracks[j % n];
+      if (!t.error) return j % n;
+    }
+    return -1;
+  }
+  function crossfadeTo(i, secs) {
+    const t = state.tracks[i];
+    if (!t) return;
+    if (fade) finishFade();
+    ensureAudio();
+    const out = audio, inc = other(), outIdx = state.idx;
+    const curTarget = origBpm() ? origBpm() + state.bpmDelta : null;
+    let delta = 0;
+    if (state.syncBpm && curTarget && t.bpm) {
+      delta = Math.round((curTarget - t.bpm) * 10) / 10;
+      delta = Math.min(t.bpm, Math.max(-t.bpm / 2, delta));
+    }
+    const r = t.bpm ? (t.bpm + delta) / t.bpm : 1;
+    clearInterval(inc._fadeT);
+    inc.loop = state.repeat === 'one';
+    inc.src = t.url;
+    inc.defaultPlaybackRate = r; inc.playbackRate = r;
+    setDeckLevel(inc, 0);
+    const p = inc.play();
+    if (p && p.catch) p.catch(() => {});
+    rampDeck(inc, true, secs);
+    rampDeck(out, false, secs);
+    out.loop = false;
+    audio = inc; state.idx = i;
+    fade = { out, outIdx, outDelta: state.bpmDelta, timer: setTimeout(finishFade, secs * 1000 + 80) };
+    state.bpmDelta = delta;
+    toast(`「${t.name}」につないでいます` + (state.syncBpm && delta ? `（BPMを ${fmtBpm(t.bpm + delta)} に合わせました）` : ''));
+    renderTrack(); renderPlay();
+    queueAnalysis();
+  }
+  function finishFade() {
+    if (!fade) return;
+    const { out, timer } = fade;
+    clearTimeout(timer); clearInterval(out._fadeT);
+    fade = null;
+    out.pause(); out.removeAttribute('src'); out.load();
+    setDeckLevel(out, 0);
+    setDeckLevel(audio, 1);
+    renderTrack();
+  }
+  function cancelFade() { if (fade) finishFade(); }
+  // 曲の終わりが近づいたら自動でつなぐ
+  setInterval(() => {
+    if (fade || !state.xfade || audio.paused || tabLive() || !audio.duration || audio.loop) return;
+    const remain = (audio.duration - audio.currentTime) / (audio.playbackRate || 1);
+    const secs = Math.min(state.xfade, audio.duration / (audio.playbackRate || 1) / 3);
+    if (remain <= secs && secs >= 1) {
+      const n = nextIndex();
+      if (n >= 0) crossfadeTo(n, secs);
+    }
+  }, 100);
 
   let analyzing = false;
   async function queueAnalysis() {
@@ -797,7 +931,7 @@ registerProcessor('pv-shifter', PVNode);`;
   }
   function togglePlay() {
     if (tabLive()) return toast('タブ音声の再生・停止は元のタブで操作してください');
-    if (audio.paused) play(); else audio.pause();
+    if (audio.paused) play(); else { cancelFade(); audio.pause(); }
   }
 
   /* ---------- tab audio capture ---------- */
@@ -823,6 +957,7 @@ registerProcessor('pv-shifter', PVNode);`;
     }
     await ensureAudio();
     if (!state.input) { stream.getTracks().forEach((t) => t.stop()); return toast('音声エンジンを起動できませんでした'); }
+    cancelFade();
     audio.pause();
     tab.stream = stream;
     tab.src = state.ctx.createMediaStreamSource(new MediaStream([at]));
@@ -852,6 +987,7 @@ registerProcessor('pv-shifter', PVNode);`;
   function cycleRepeat() {
     state.repeat = state.repeat === 'all' ? 'one' : state.repeat === 'one' ? 'off' : 'all';
     audio.loop = state.repeat === 'one';
+    other().loop = false;
     $('#repeat').setAttribute('aria-pressed', state.repeat !== 'off');
     $('#repeatLabel').textContent = REPEAT[state.repeat];
   }
@@ -877,7 +1013,8 @@ registerProcessor('pv-shifter', PVNode);`;
       renderReadouts(); return;
     }
     $('#trackName').textContent = t ? t.name : '曲を追加してください';
-    $('#trackMeta').textContent = t ? `${t.ext}${t.error ? ' · 再生不可' : ''}` : '';
+    $('#trackMeta').innerHTML = fade ? '<span class="mixing">MIX ▶</span>' : '';
+    if (t && !fade) $('#trackMeta').textContent = `${t.ext}${t.error ? ' · 再生不可' : ''}`;
     document.title = t && !t.demo ? `${t.name} · キー変更・テンポ変更プレイヤー` : BASE_TITLE;
     renderReadouts(); renderTime();
   }
@@ -899,7 +1036,7 @@ registerProcessor('pv-shifter', PVNode);`;
       li.querySelector('.t div').textContent = t.name;
       li.addEventListener('click', (e) => {
         if (e.target.closest('.x')) { e.stopPropagation(); removeTrack(t.id); return; }
-        if (i === state.idx) togglePlay(); else loadTrack(i, true);
+        if (i === state.idx) togglePlay(); else goTo(i);
       });
       li.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); li.click(); } });
       ol.appendChild(li);
@@ -980,8 +1117,16 @@ registerProcessor('pv-shifter', PVNode);`;
   $('#bpmReset').addEventListener('click', () => { state.bpmDelta = 0; applyTempo(); bump('#bpmVal'); });
   $('#file').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
   const vol = $('#vol');
-  const setVol = () => { audio.volume = vol.value / 100; vol.style.setProperty('--p', vol.value + '%'); };
+  const setVol = () => {
+    decks.forEach((d) => { if (state.gains || d === audio) d.volume = vol.value / 100; });
+    vol.style.setProperty('--p', vol.value + '%');
+  };
   vol.addEventListener('input', setVol); setVol();
+  const xf = $('#xfade'), sb = $('#syncBpm');
+  xf.value = String(state.xfade); sb.checked = state.syncBpm;
+  const saveMix = () => { try { localStorage.setItem('ktp-mix', JSON.stringify({ xfade: state.xfade, syncBpm: state.syncBpm })); } catch (e) {} };
+  xf.addEventListener('change', () => { state.xfade = parseFloat(xf.value) || 0; saveMix(); });
+  sb.addEventListener('change', () => { state.syncBpm = sb.checked; saveMix(); });
   const seek = $('#seek');
   seek.addEventListener('input', () => { seeking = true; seek.style.setProperty('--p', seek.value / 10 + '%'); $('#tCur').textContent = fmtTime((seek.value / 1000) * (audio.duration || 0)); });
   seek.addEventListener('change', () => { if (audio.duration) audio.currentTime = (seek.value / 1000) * audio.duration; seeking = false; });
@@ -1002,20 +1147,32 @@ registerProcessor('pv-shifter', PVNode);`;
     setOrig(heard / rate());
   });
 
-  audio.addEventListener('timeupdate', renderTime);
-  audio.addEventListener('loadedmetadata', () => { audio.playbackRate = rate(); renderTime(); });
-  audio.addEventListener('ratechange', () => { const r = rate(); if (Math.abs(audio.playbackRate - r) > 1e-6) audio.playbackRate = r; });
-  audio.addEventListener('play', renderPlay);
-  audio.addEventListener('pause', renderPlay);
-  audio.addEventListener('ended', () => {
-    if (state.repeat === 'off' && state.idx >= state.tracks.length - 1) return;
-    step(1);
-  });
-  audio.addEventListener('error', () => {
-    const t = cur();
-    if (!t || !audio.getAttribute('src')) return;
-    t.error = true; renderTrack();
-    toast(`「${t.name}」はこのブラウザで再生できない形式です`);
+  const onActive = (fn) => (e) => { if (e.target === audio) fn(e); };
+  decks.forEach((d) => {
+    d.addEventListener('timeupdate', onActive(renderTime));
+    d.addEventListener('loadedmetadata', onActive(() => { audio.playbackRate = rate(); renderTime(); }));
+    d.addEventListener('ratechange', onActive(() => { const r = rate(); if (Math.abs(audio.playbackRate - r) > 1e-6) audio.playbackRate = r; }));
+    d.addEventListener('play', onActive(renderPlay));
+    d.addEventListener('pause', onActive(renderPlay));
+    d.addEventListener('ended', onActive(() => {
+      const n = nextIndex();
+      if (n < 0) return;
+      loadTrack(n, true);
+    }));
+    d.addEventListener('error', onActive(() => {
+      const t = cur();
+      if (!t || !audio.getAttribute('src')) return;
+      t.error = true;
+      if (fade) {                       // つなぎ先が再生できなかったら元の曲に戻す
+        const f = fade; clearTimeout(f.timer); fade = null;
+        audio.removeAttribute('src');
+        audio = f.out; state.idx = f.outIdx; state.bpmDelta = f.outDelta;
+        setDeckLevel(audio, 1); setDeckLevel(other(), 0);
+        applyTempo();
+      }
+      renderTrack();
+      toast(`「${t.name}」はこのブラウザで再生できない形式です`);
+    }));
   });
 
   window.addEventListener('keydown', (e) => {
