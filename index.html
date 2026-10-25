@@ -282,13 +282,13 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
       <div class="mix">
         <label for="xfade">曲のつなぎ</label>
         <select id="xfade">
-          <option value="0">なし</option>
+          <option value="0">重ねない</option>
           <option value="3">3秒</option>
           <option value="6" selected>6秒</option>
           <option value="10">10秒</option>
           <option value="16">16秒</option>
         </select>
-        <label class="chk"><input type="checkbox" id="syncBpm"> 次の曲のBPMを今の曲に合わせる</label>
+        <span class="hint">曲の終わりに次の曲を重ねて、止まらずに続けます（キーの設定はそのまま）</span>
       </div>
       <div class="vol"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="85" aria-label="音量"></div>
     </div>
@@ -596,12 +596,11 @@ registerProcessor('pv-shifter', PVNode);`;
   const state = {
     tracks: [], idx: -1, key: 0, bpmDelta: 0, repeat: 'all',
     ctx: null, analyser: null, setRatio: null, starting: null, taps: [], input: null,
-    gains: null, xfade: 6, syncBpm: false,
+    gains: null, xfade: 6,
   };
   try {
     const sv = JSON.parse(localStorage.getItem('ktp-mix') || '{}');
     if (typeof sv.xfade === 'number') state.xfade = sv.xfade;
-    if (typeof sv.syncBpm === 'boolean') state.syncBpm = sv.syncBpm;
   } catch (e) {}
   const tab = { stream: null, src: null };
   const tabLive = () => !!tab.stream;
@@ -845,13 +844,7 @@ registerProcessor('pv-shifter', PVNode);`;
     if (fade) finishFade();
     ensureAudio();
     const out = audio, inc = other(), outIdx = state.idx;
-    const curTarget = origBpm() ? origBpm() + state.bpmDelta : null;
-    let delta = 0;
-    if (state.syncBpm && curTarget && t.bpm) {
-      delta = Math.round((curTarget - t.bpm) * 10) / 10;
-      delta = Math.min(t.bpm, Math.max(-t.bpm / 2, delta));
-    }
-    const r = t.bpm ? (t.bpm + delta) / t.bpm : 1;
+    const delta = 0, r = 1;            // 次の曲は原曲のテンポで始める
     clearInterval(inc._fadeT);
     inc.loop = state.repeat === 'one';
     inc.src = t.url;
@@ -865,7 +858,7 @@ registerProcessor('pv-shifter', PVNode);`;
     audio = inc; state.idx = i;
     fade = { out, outIdx, outDelta: state.bpmDelta, timer: setTimeout(finishFade, secs * 1000 + 80) };
     state.bpmDelta = delta;
-    toast(`「${t.name}」につないでいます` + (state.syncBpm && delta ? `（BPMを ${fmtBpm(t.bpm + delta)} に合わせました）` : ''));
+    toast(`「${t.name}」につないでいます`);
     renderTrack(); renderPlay();
     queueAnalysis();
   }
@@ -1122,11 +1115,10 @@ registerProcessor('pv-shifter', PVNode);`;
     vol.style.setProperty('--p', vol.value + '%');
   };
   vol.addEventListener('input', setVol); setVol();
-  const xf = $('#xfade'), sb = $('#syncBpm');
-  xf.value = String(state.xfade); sb.checked = state.syncBpm;
-  const saveMix = () => { try { localStorage.setItem('ktp-mix', JSON.stringify({ xfade: state.xfade, syncBpm: state.syncBpm })); } catch (e) {} };
+  const xf = $('#xfade');
+  xf.value = String(state.xfade);
+  const saveMix = () => { try { localStorage.setItem('ktp-mix', JSON.stringify({ xfade: state.xfade })); } catch (e) {} };
   xf.addEventListener('change', () => { state.xfade = parseFloat(xf.value) || 0; saveMix(); });
-  sb.addEventListener('change', () => { state.syncBpm = sb.checked; saveMix(); });
   const seek = $('#seek');
   seek.addEventListener('input', () => { seeking = true; seek.style.setProperty('--p', seek.value / 10 + '%'); $('#tCur').textContent = fmtTime((seek.value / 1000) * (audio.duration || 0)); });
   seek.addEventListener('change', () => { if (audio.duration) audio.currentTime = (seek.value / 1000) * audio.duration; seeking = false; });
