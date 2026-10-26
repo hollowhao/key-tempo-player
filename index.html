@@ -153,9 +153,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 .tabsrc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ghostbtn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 8px 14px; font-size: .86rem; }
 .ghostbtn:hover { border-color: var(--danger); color: var(--danger); }
+.ghostbtn:disabled { opacity: .45; cursor: not-allowed; }
+.ghostbtn:disabled:hover { border-color: var(--line); color: inherit; }
 .tablist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.trow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.trow { display: grid; grid-template-columns: 18px 10px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
 .trow.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.trow .tchk { width: 18px; height: 18px; margin: 0; accent-color: var(--danger); cursor: pointer; }
+.trow.chk { background: color-mix(in srgb, var(--danger) 9%, var(--surface-2)); }
 .trow .meter { width: 8px; height: 28px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
 .trow .meter i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); transition: height .12s linear; }
 .trow .tname { min-width: 0; width: 100%; font: inherit; font-weight: 500; color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; }
@@ -305,6 +309,7 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
       </div>
       <div class="tabsrc-actions">
         <button class="capbtn" id="tabBtn"><span class="dot"></span><span id="tabBtnText">タブ音声を取り込む</span></button>
+        <button class="ghostbtn" id="tabRemoveSel" hidden disabled>選択して解除</button>
         <button class="ghostbtn" id="tabStopAll" hidden>すべて解除</button>
       </div>
     </div>
@@ -318,6 +323,7 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
         <li>2曲目からは<b>「＋ タブを追加」</b>で同じように登録します。登録は最初に1回だけで、曲を変えるたびに取り込み直す必要はありません。</li>
         <li>あとは各タブで再生・停止するだけです。音が出ているタブが自動で選ばれ、<b>↑ / ↓（W / S）</b>でキーを変えられます。元のタブの音は自動で消えます。</li>
         <li><b>「曲（タブ）ごとにキーを覚える」</b>をオンにすると、曲ごとに別のキーを先に決めておけます。曲名の欄を押すと名前を変えられます。</li>
+        <li>いらなくなったタブは、左のチェックを入れて<b>「選んだ○件を解除」</b>でまとめて外せます。1つだけなら右の × 、全部なら<b>「すべて解除」</b>です。</li>
         <li>テンポは取り込み中は変えられないので、各サイトの再生速度の設定を使ってください。</li>
       </ol>
     </details>
@@ -1131,7 +1137,7 @@ registerProcessor('pv-shifter', PVNode);`;
     const an = ctx.createAnalyser();
     an.fftSize = 1024;
     src.connect(an); src.connect(sh.node); sh.node.connect(state.master);
-    const t = { id: ++tabSeq, name: `曲${tabs.length + 1}`, stream, src, sh, an, buf: new Float32Array(an.fftSize), key: shownKey(), level: 0, live: false, heard: 0, devId };
+    const t = { id: ++tabSeq, name: `曲${tabs.length + 1}`, stream, src, sh, an, buf: new Float32Array(an.fftSize), key: shownKey(), level: 0, live: false, heard: 0, checked: false, devId };
     tabs.push(t);
     selTab = t.id;
     applyTabKey(t);
@@ -1150,6 +1156,20 @@ registerProcessor('pv-shifter', PVNode);`;
     try { t.src.disconnect(); t.an.disconnect(); t.sh.node.disconnect(); } catch (e) {}
     if (selTab === id) selTab = tabs.length ? tabs[Math.min(i, tabs.length - 1)].id : 0;
     renderTabs(); renderTrack();
+  }
+  function removeCheckedTabs() {
+    const ids = tabs.filter((t) => t.checked).map((t) => t.id);
+    if (!ids.length) return toast('解除するタブにチェックを入れてください');
+    ids.forEach(removeTab);
+    toast(`${ids.length}件のタブを解除しました`);
+  }
+  function updateRemoveSel() {
+    const b = $('#tabRemoveSel');
+    if (!b) return;
+    const n = tabs.filter((t) => t.checked).length;
+    b.hidden = !tabLive();
+    b.disabled = n === 0;
+    b.textContent = n ? `選んだ${n}件を解除` : '選択して解除';
   }
   function stopAllTabs() {
     if (!tabs.length) return;
@@ -1184,6 +1204,7 @@ registerProcessor('pv-shifter', PVNode);`;
     const has = tabLive();
     $('#tabBtnText').textContent = has ? '＋ タブを追加' : 'タブ音声を取り込む';
     $('#tabStopAll').hidden = !has;
+    updateRemoveSel();
     $('#tabOpts').hidden = !has;
     list.hidden = !has;
     $('#tabLead').textContent = has
@@ -1194,16 +1215,21 @@ registerProcessor('pv-shifter', PVNode);`;
       const li = document.createElement('li');
       li.className = 'trow';
       li.dataset.id = t.id;
-      li.innerHTML = `<span class="meter" aria-hidden="true"><i></i></span>
+      li.innerHTML = `<input class="tchk" type="checkbox" aria-label="${i + 1}番目のタブを解除する対象に選ぶ">
+        <span class="meter" aria-hidden="true"><i></i></span>
         <input class="tname" type="text" maxlength="40" aria-label="曲の名前（${i + 1}番目のタブ）">
         <span class="st"></span>
         <span class="tkey"${state.perTabKey ? '' : ' hidden'}><button class="kd" aria-label="この曲のキーを下げる">−</button><b></b><button class="ku" aria-label="この曲のキーを上げる">＋</button></span>
         <button class="x" aria-label="このタブの取り込みをやめる">×</button>`;
+      const chk = li.querySelector('.tchk');
+      chk.checked = t.checked;
+      li.classList.toggle('chk', t.checked);
       const inp = li.querySelector('.tname');
       inp.value = t.name;
       inp.addEventListener('input', () => { t.name = inp.value.trim() || `曲${i + 1}`; if (selTab === t.id) renderTrack(); });
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); });
       li.addEventListener('click', (e) => {
+        if (e.target.closest('.tchk')) { t.checked = e.target.checked; li.classList.toggle('chk', t.checked); return updateRemoveSel(); }
         if (e.target.closest('.x')) return removeTab(t.id);
         if (e.target.closest('.kd')) return changeTabKey(t, -1);
         if (e.target.closest('.ku')) return changeTabKey(t, 1);
@@ -1407,6 +1433,7 @@ registerProcessor('pv-shifter', PVNode);`;
   if ($('#tabBtn')) {
     $('#tabBtn').addEventListener('click', addTab);
     $('#tabStopAll').addEventListener('click', stopAllTabs);
+    $('#tabRemoveSel').addEventListener('click', removeCheckedTabs);
     $('#perTabKey').checked = state.perTabKey;
     $('#perTabKey').addEventListener('change', (e) => setPerTabKey(e.target.checked));
   }
@@ -1493,7 +1520,7 @@ registerProcessor('pv-shifter', PVNode);`;
       case 'ArrowDown': changeKey(-1); cap = '#keyDown'; break;
       case 'ArrowRight': changeBpm(e.shiftKey ? 5 : 1); cap = '#bpmUp'; break;
       case 'ArrowLeft': changeBpm(e.shiftKey ? -5 : -1); cap = '#bpmDown'; break;
-      case ' ': case 'Spacebar': if (el && el.tagName === 'BUTTON') return; togglePlay(); break;
+      case ' ': case 'Spacebar': if (el && /^(BUTTON|INPUT|SELECT)$/.test(el.tagName)) return; togglePlay(); break;
       case 'n': case 'N': if (tabLive()) cycleTab(1); else step(1); break;
       case 'p': case 'P': if (tabLive()) cycleTab(-1); else $('#prev').click(); break;
       case 'r': case 'R': resetAll(); break;
