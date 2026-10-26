@@ -1101,14 +1101,22 @@ registerProcessor('pv-shifter', PVNode);`;
   const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const tabKeyOf = (t) => (state.perTabKey ? t.key : state.key);
   function applyTabKey(t) { if (t.sh) t.sh.setRatio(Math.pow(2, tabKeyOf(t) / 12)); }
+  // 取り込んだタブに画面を切り替えず、このページを前に出したままにする
+  // （新しいChromeは 'focus-capturing-application'、古いChromeは 'no-focus-change' という名前）
+  function keepFocusHere(controller) {
+    for (const v of ['focus-capturing-application', 'no-focus-change']) {
+      try { controller.setFocusBehavior(v); return true; } catch (e) { if (!(e instanceof TypeError)) return false; }
+    }
+    return false;
+  }
   // 戻り値: 'added' | 'cancel' | 'dup' | 'noaudio' | 'needclick' | 'error'
   async function addTab(opt) {
     const batch = !!(opt && opt.batch);
     const md = navigator.mediaDevices;
     if (!md || !md.getDisplayMedia) { toast('このブラウザはタブ音声の取り込みに対応していません。PC の Chrome か Edge で開いてください'); return 'error'; }
     if (navigator.userActivation && !navigator.userActivation.isActive) return 'needclick';
-    let controller = null;
-    try { if (window.CaptureController) { controller = new CaptureController(); try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} } } catch (e) { controller = null; }
+    let controller = null, focusSet = false;
+    try { if (window.CaptureController) { controller = new CaptureController(); focusSet = keepFocusHere(controller); } } catch (e) { controller = null; }
     let stream;
     try {
       const opts = {
@@ -1118,9 +1126,10 @@ registerProcessor('pv-shifter', PVNode);`;
       };
       if (controller) opts.controller = controller;
       const pending = md.getDisplayMedia(opts);
+      if (controller && !focusSet) focusSet = keepFocusHere(controller);
       ensureAudio();
       stream = await pending;
-      if (controller) { try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} }   // 登録後もこのページのままにする
+      if (controller && !focusSet) keepFocusHere(controller);   // 登録後もこのページのままにする
     } catch (e) {
       const msg = (e && e.message) || String(e);
       if ((e && e.name === 'InvalidStateError') || /activation|gesture/i.test(msg)) return 'needclick';
@@ -1170,6 +1179,8 @@ registerProcessor('pv-shifter', PVNode);`;
     toast('タブを選ぶ画面が続けて開きます。1つずつ選んで「共有」、全部終わったら「キャンセル」を押してください', 6000);
     let added = 0, last = '';
     for (let guard = 0; guard < 60; guard++) {
+      // 万一ほかのタブに切り替わっていたら、選ぶ画面が見えないまま開かないよう、いったん止める
+      if (guard > 0 && document.visibilityState === 'hidden') { last = 'needclick'; break; }
       last = await addTab({ batch: true });
       if (last === 'added') { added++; continue; }
       if (last === 'dup' || last === 'noaudio') continue;
