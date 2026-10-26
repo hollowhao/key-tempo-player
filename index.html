@@ -153,7 +153,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 .tabsrc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ghostbtn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 8px 14px; font-size: .86rem; }
 .ghostbtn:hover { border-color: var(--danger); color: var(--danger); }
+.ghostbtn.add:hover { border-color: var(--accent); color: var(--accent); }
 .ghostbtn:disabled { opacity: .45; cursor: not-allowed; }
+.capbtn:disabled { opacity: .55; cursor: progress; }
 .ghostbtn:disabled:hover { border-color: var(--line); color: inherit; }
 .tablist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .trow { display: grid; grid-template-columns: 18px 10px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
@@ -305,10 +307,11 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
     <div class="tabsrc-row">
       <div>
         <h2>動画・音楽サイトの音声を使う</h2>
-        <p class="lead" id="tabLead">別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは、全部のタブを先に登録しておけます。</p>
+        <p class="lead" id="tabLead">別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは「まとめて取り込む」で全部のタブを先に登録しておけます。</p>
       </div>
       <div class="tabsrc-actions">
         <button class="capbtn" id="tabBtn"><span class="dot"></span><span id="tabBtnText">タブ音声を取り込む</span></button>
+        <button class="ghostbtn add" id="tabBatch">まとめて取り込む</button>
         <button class="ghostbtn" id="tabRemoveSel" hidden disabled>選択して解除</button>
         <button class="ghostbtn" id="tabStopAll" hidden>すべて解除</button>
       </div>
@@ -319,8 +322,8 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
       <summary>使い方</summary>
       <ol class="steps">
         <li>歌う曲の YouTube などを、1曲ずつ別のタブで開きます（ニコニコ動画や SoundCloud も使えます）。</li>
-        <li>このページの<b>「タブ音声を取り込む」</b>を押してタブを選び、<b>「タブの音声も共有する」がオン</b>になっているのを確かめて「共有」を押します。</li>
-        <li>2曲目からは<b>「＋ タブを追加」</b>で同じように登録します。登録は最初に1回だけで、曲を変えるたびに取り込み直す必要はありません。</li>
+        <li><b>「まとめて取り込む」</b>を押すと、タブを選ぶ画面が続けて開きます。タブを1つずつ選び、<b>「タブの音声も共有する」がオン</b>になっているのを確かめて「共有」を押していき、全部終わったら<b>「キャンセル」</b>を押します。</li>
+        <li>あとから1曲だけ足すときは<b>「＋ タブを追加」</b>です。登録は最初に1回だけで、曲を変えるたびに取り込み直す必要はありません。</li>
         <li>あとは各タブで再生・停止するだけです。音が出ているタブが自動で選ばれ、<b>↑ / ↓（W / S）</b>でキーを変えられます。元のタブの音は自動で消えます。</li>
         <li><b>「曲（タブ）ごとにキーを覚える」</b>をオンにすると、曲ごとに別のキーを先に決めておけます。曲名の欄を押すと名前を変えられます。</li>
         <li>いらなくなったタブは、左のチェックを入れて<b>「選んだ○件を解除」</b>でまとめて外せます。1つだけなら右の × 、全部なら<b>「すべて解除」</b>です。</li>
@@ -1098,9 +1101,12 @@ registerProcessor('pv-shifter', PVNode);`;
   const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const tabKeyOf = (t) => (state.perTabKey ? t.key : state.key);
   function applyTabKey(t) { if (t.sh) t.sh.setRatio(Math.pow(2, tabKeyOf(t) / 12)); }
-  async function addTab() {
+  // 戻り値: 'added' | 'cancel' | 'dup' | 'noaudio' | 'needclick' | 'error'
+  async function addTab(opt) {
+    const batch = !!(opt && opt.batch);
     const md = navigator.mediaDevices;
-    if (!md || !md.getDisplayMedia) return toast('このブラウザはタブ音声の取り込みに対応していません。PC の Chrome か Edge で開いてください');
+    if (!md || !md.getDisplayMedia) { toast('このブラウザはタブ音声の取り込みに対応していません。PC の Chrome か Edge で開いてください'); return 'error'; }
+    if (navigator.userActivation && !navigator.userActivation.isActive) return 'needclick';
     let controller = null;
     try { if (window.CaptureController) { controller = new CaptureController(); try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} } } catch (e) { controller = null; }
     let stream;
@@ -1116,20 +1122,26 @@ registerProcessor('pv-shifter', PVNode);`;
       stream = await pending;
       if (controller) { try { controller.setFocusBehavior('no-focus-change'); } catch (e) {} }   // 登録後もこのページのままにする
     } catch (e) {
-      return toast(e && e.name === 'NotAllowedError' ? '取り込みをキャンセルしました' : 'タブを取り込めませんでした：' + ((e && e.message) || e));
+      const msg = (e && e.message) || String(e);
+      if ((e && e.name === 'InvalidStateError') || /activation|gesture/i.test(msg)) return 'needclick';
+      if (e && e.name === 'NotAllowedError') { if (!batch) toast('取り込みをキャンセルしました'); return 'cancel'; }
+      toast('タブを取り込めませんでした：' + msg);
+      return 'error';
     }
     const at = stream.getAudioTracks()[0];
     if (!at) {
       stream.getTracks().forEach((t) => t.stop());
-      return toast('音声が共有されていません。選ぶ画面で「タブの音声も共有する」をオンにしてください');
+      toast('音声が共有されていません。選ぶ画面で「タブの音声も共有する」をオンにしてください', 4000);
+      return 'noaudio';
     }
     const devId = String((at.getSettings && at.getSettings().deviceId) || '').split('?')[0];
     if (devId && tabs.some((t) => t.devId === devId)) {
       stream.getTracks().forEach((t) => t.stop());
-      return toast('そのタブはもう登録されています');
+      toast('そのタブはもう登録されています');
+      return 'dup';
     }
     await ensureAudio();
-    if (!state.makeShifter) { stream.getTracks().forEach((t) => t.stop()); return toast('音声エンジンを起動できませんでした'); }
+    if (!state.makeShifter) { stream.getTracks().forEach((t) => t.stop()); toast('音声エンジンを起動できませんでした'); return 'error'; }
     cancelFade();
     audio.pause();
     const ctx = state.ctx, sh = state.makeShifter();
@@ -1143,10 +1155,29 @@ registerProcessor('pv-shifter', PVNode);`;
     applyTabKey(t);
     stream.getTracks().forEach((tr) => tr.addEventListener('ended', () => removeTab(t.id)));
     const sup = md.getSupportedConstraints ? md.getSupportedConstraints() : {};
-    toast(tabs.length > 1 ? `${tabs.length}曲目のタブを登録しました`
-      : sup.suppressLocalAudioPlayback ? '取り込みました。次の曲のタブも「＋ タブを追加」で登録できます'
+    if (batch) toast(`${tabs.length}曲目を登録しました。続けて次のタブを選んでください（終わったら「キャンセル」）`, 4000);
+    else toast(tabs.length > 1 ? `${tabs.length}曲目のタブを登録しました`
+      : sup.suppressLocalAudioPlayback ? '取り込みました。次の曲のタブも「＋ タブを追加」か「まとめて追加」で登録できます'
       : '取り込みました。元のタブの音も聞こえる場合は、元のタブの音量を下げてください');
     renderTabs(); renderTrack();
+    return 'added';
+  }
+  // 選ぶ画面を続けて開き、キャンセルされるまでタブを登録していく
+  let batching = false;
+  async function addTabsBatch() {
+    if (batching) return;
+    batching = true; renderTabs();
+    toast('タブを選ぶ画面が続けて開きます。1つずつ選んで「共有」、全部終わったら「キャンセル」を押してください', 6000);
+    let added = 0, last = '';
+    for (let guard = 0; guard < 60; guard++) {
+      last = await addTab({ batch: true });
+      if (last === 'added') { added++; continue; }
+      if (last === 'dup' || last === 'noaudio') continue;
+      break;
+    }
+    batching = false; renderTabs();
+    if (last === 'needclick') toast((added ? `${added}曲を登録しました。` : '') + '続けるには「まとめて追加」をもう一度押してください', 5000);
+    else if (last !== 'error') toast(added ? `${added}曲のタブをまとめて登録しました` : '取り込みをやめました', 3500);
   }
   function removeTab(id) {
     const i = tabs.findIndex((t) => t.id === id);
@@ -1203,13 +1234,18 @@ registerProcessor('pv-shifter', PVNode);`;
     if (!list) return;
     const has = tabLive();
     $('#tabBtnText').textContent = has ? '＋ タブを追加' : 'タブ音声を取り込む';
+    $('#tabBtn').disabled = batching;
+    $('#tabBatch').disabled = batching;
+    $('#tabBatch').textContent = batching ? '取り込み中…' : has ? 'まとめて追加' : 'まとめて取り込む';
     $('#tabStopAll').hidden = !has;
     updateRemoveSel();
     $('#tabOpts').hidden = !has;
     list.hidden = !has;
-    $('#tabLead').textContent = has
+    $('#tabLead').textContent = batching
+      ? 'タブを選ぶ画面が続けて開きます。登録したいタブを1つずつ選んで「共有」を押し、全部終わったら「キャンセル」を押してください。'
+      : has
       ? '登録したタブのどれかを YouTube などで再生すると、その曲が自動で選ばれ、キーを変えた音が流れます。曲を変えるときも取り込み直す必要はありません。'
-      : '別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは、全部のタブを先に登録しておけます。';
+      : '別のタブで再生している動画や音楽の音声を取り込んで、キーを変えて聴けます。歌う曲が何曲かあるときは「まとめて取り込む」で全部のタブを先に登録しておけます。';
     list.innerHTML = '';
     tabs.forEach((t, i) => {
       const li = document.createElement('li');
@@ -1340,10 +1376,10 @@ registerProcessor('pv-shifter', PVNode);`;
     $('#list').classList.toggle('paused', !playing);
   }
   let toastT;
-  function toast(msg) {
+  function toast(msg, ms) {
     const el = $('#toast');
     el.textContent = msg; el.hidden = false;
-    clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2200);
+    clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, ms || 2200);
   }
 
   /* ---------- visualizer ---------- */
@@ -1396,6 +1432,7 @@ registerProcessor('pv-shifter', PVNode);`;
   /* ---------- phone / app ---------- */
   if ($('#tabBtn') && (IS_MOBILE || !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia))) {
     $('#tabBtn').hidden = true;
+    if ($('#tabBatch')) $('#tabBatch').hidden = true;
     if ($('#tabHelp')) $('#tabHelp').hidden = true;
     $('#tabLead').textContent = 'スマホ・タブレットでは、ほかのアプリやタブの音声を取り込めないため、この機能はPC（Chrome / Edge）専用です。';
   }
@@ -1431,7 +1468,10 @@ registerProcessor('pv-shifter', PVNode);`;
   /* ---------- events ---------- */
   $('#play').addEventListener('click', togglePlay);
   if ($('#tabBtn')) {
-    $('#tabBtn').addEventListener('click', addTab);
+    $('#tabBtn').addEventListener('click', async () => {
+      if ((await addTab()) === 'needclick') toast('もう一度押してください');
+    });
+    $('#tabBatch').addEventListener('click', addTabsBatch);
     $('#tabStopAll').addEventListener('click', stopAllTabs);
     $('#tabRemoveSel').addEventListener('click', removeCheckedTabs);
     $('#perTabKey').checked = state.perTabKey;
