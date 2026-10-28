@@ -236,13 +236,6 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
   .vol { margin-left: 0; flex: 1 1 100%; }
   .lcd { padding: 16px; }
 }
-/* Install as app */
-.install { position: relative; display: flex; gap: 12px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding-right: 52px; }
-.install-text { min-width: 0; flex: 1 1 260px; }
-.install h2 { font-size: 1rem; margin: 0; }
-.install p { margin: 2px 0 0; font-size: .84rem; color: var(--muted); }
-.install .x { position: absolute; top: 8px; right: 8px; border: 0; background: none; color: var(--muted); width: 36px; height: 36px; border-radius: 8px; font-size: 1.2rem; }
-.install .x:hover { background: var(--line); color: var(--fg); }
 .touch-note { display: none; font-size: .84rem; color: var(--muted); margin: 0 0 8px; }
 @media (hover: none) and (pointer: coarse) {
   .touch-note { display: block; }
@@ -260,17 +253,6 @@ kbd { font-family: var(--font-display); font-size: .78rem; min-width: 30px; text
     <h1>キー変更・テンポ変更プレイヤー<small>曲のキー（音程）とBPMを別々に変えられる無料ツール</small></h1>
     <div class="engine" id="engine">音声エンジン：再生開始時に起動</div>
   </header>
-
-  
-  <section class="panel install" id="installPanel" aria-label="アプリとして使う" hidden>
-    <button class="x" id="installClose" aria-label="この案内を閉じる">×</button>
-    <div class="install-text">
-      <h2>アプリとして使う</h2>
-      <p id="installHow">ホーム画面に追加すると、アプリのように全画面で使えます。</p>
-    </div>
-    <button class="capbtn" id="installBtn" hidden>アプリをインストール</button>
-  </section>
-  
 
   <section class="lcd" aria-label="ディスプレイ">
     <div class="lcd-top">
@@ -671,7 +653,6 @@ registerProcessor('pv-shifter', PVNode);`;
   const IS_IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const IS_ANDROID = /Android/i.test(UA);
   const IS_MOBILE = IS_IOS || IS_ANDROID || !!(navigator.userAgentData && navigator.userAgentData.mobile);
-  const IS_STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   // iPhone: マナーモードでも音が出るようにする（Safari 16.4+）
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   const decks = [$('#media'), $('#media2')];
@@ -1447,31 +1428,8 @@ registerProcessor('pv-shifter', PVNode);`;
     if ($('#tabHelp')) $('#tabHelp').hidden = true;
     $('#tabLead').textContent = 'スマホ・タブレットでは、ほかのアプリやタブの音声を取り込めないため、この機能はPC（Chrome / Edge）専用です。';
   }
-  if ($('#installPanel')) {
-    const panel = $('#installPanel'), how = $('#installHow'), btn = $('#installBtn');
-    let dismissed = false;
-    try { dismissed = localStorage.getItem('ktp-install-dismissed') === '1'; } catch (e) {}
-    let deferred = null;
-    const show = () => {
-      if (IS_STANDALONE || dismissed) return;
-      if (deferred) { btn.hidden = false; how.textContent = 'インストールすると、ホーム画面やアプリ一覧から全画面で開けます。'; panel.hidden = false; }
-      else if (IS_IOS) { how.innerHTML = 'Safari の<b>共有ボタン</b>（□に↑のマーク）→<b>「ホーム画面に追加」</b>で、アプリのように全画面で使えます。'; panel.hidden = false; }
-      else if (IS_ANDROID) { how.innerHTML = 'Chrome の<b>メニュー（︙）</b>→<b>「ホーム画面に追加」</b>または<b>「アプリをインストール」</b>で、アプリのように使えます。'; panel.hidden = false; }
-    };
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; show(); });
-    window.addEventListener('appinstalled', () => { panel.hidden = true; deferred = null; });
-    btn.addEventListener('click', async () => {
-      if (!deferred) return;
-      deferred.prompt();
-      try { await deferred.userChoice; } catch (e) {}
-      deferred = null; panel.hidden = true;
-    });
-    $('#installClose').addEventListener('click', () => {
-      panel.hidden = true; dismissed = true;
-      try { localStorage.setItem('ktp-install-dismissed', '1'); } catch (e) {}
-    });
-    show();
-  }
+  // 「アプリとしてインストール」の案内は出さない（Android の Chrome が自動で出す案内も止める）
+  window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
   if ('serviceWorker' in navigator && location.protocol === 'https:' && document.querySelector('link[rel="manifest"]')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
